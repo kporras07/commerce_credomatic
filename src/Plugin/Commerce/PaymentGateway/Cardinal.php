@@ -19,6 +19,7 @@ use Drupal\Core\Entity\EntityTypeManagerInterface;
 use Drupal\Core\Form\FormStateInterface;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\DependencyInjection\ContainerInterface;
+use GuzzleHttp\ClientInterface;
 
 /**
  * Provides the Off-site Redirect payment gateway.
@@ -29,6 +30,8 @@ use Symfony\Component\DependencyInjection\ContainerInterface;
  *   display_label = "Credomatic Cardinal",
  *   forms = {
  *     "offsite-payment" = "Drupal\commerce_credomatic\PluginForm\CardinalForm",
+ *     "capture-payment" = "Drupal\commerce_payment\PluginForm\PaymentCaptureForm",
+ *     "void-payment" = "Drupal\commerce_payment\PluginForm\PaymentVoidForm",
  *   },
  *   payment_method_types = {"credit_card"},
  *   credit_card_types = {
@@ -44,6 +47,13 @@ class Cardinal extends OffsitePaymentGatewayBase {
    * @var string
    */
   protected $url;
+
+  /**
+   * HTTP Client.
+   *
+   * @var \GuzzleHttp\Client
+   */
+  protected $client;
 
   /**
    * Constructs a new Offsite object.
@@ -62,10 +72,13 @@ class Cardinal extends OffsitePaymentGatewayBase {
    *   The payment method type manager.
    * @param \Drupal\Component\Datetime\TimeInterface $time
    *   The time.
+   * @param \GuzzleHttp\ClientInterface $client
+   *   The http client.
    */
-  public function __construct(array $configuration, $plugin_id, $plugin_definition, EntityTypeManagerInterface $entity_type_manager, PaymentTypeManager $payment_type_manager, PaymentMethodTypeManager $payment_method_type_manager, TimeInterface $time) {
+  public function __construct(array $configuration, $plugin_id, $plugin_definition, EntityTypeManagerInterface $entity_type_manager, PaymentTypeManager $payment_type_manager, PaymentMethodTypeManager $payment_method_type_manager, TimeInterface $time, ClientInterface $client) {
     parent::__construct($configuration, $plugin_id, $plugin_definition, $entity_type_manager, $payment_type_manager, $payment_method_type_manager, $time);
     $this->url = 'https://credomatic.compassmerchantsolutions.com/api/transact.php';
+    $this->client = $client;
   }
 
   /**
@@ -79,7 +92,8 @@ class Cardinal extends OffsitePaymentGatewayBase {
       $container->get('entity_type.manager'),
       $container->get('plugin.manager.commerce_payment_type'),
       $container->get('plugin.manager.commerce_payment_method_type'),
-      $container->get('datetime.time')
+      $container->get('datetime.time'),
+      $container->get('http_client')
     );
   }
 
@@ -132,6 +146,29 @@ class Cardinal extends OffsitePaymentGatewayBase {
     ];
 
     return $form;
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function buildPaymentOperations(PaymentInterface $payment) {
+    $payment_state = $payment->getState()->getId();
+    $operations = [];
+    $operations['capture'] = [
+      'title' => $this->t('Capture'),
+      'page_title' => $this->t('Capture payment'),
+      'plugin_form' => 'capture-payment',
+      'access' => $payment_state == 'auth',
+    ];
+
+    $operations['void'] = [
+      'title' => $this->t('Void'),
+      'page_title' => $this->t('Void payment'),
+      'plugin_form' => 'void-payment',
+      'access' => $payment_state == 'auth',
+    ];
+
+    return $operations;
   }
 
   /**
@@ -285,6 +322,15 @@ class Cardinal extends OffsitePaymentGatewayBase {
         throw new AuthenticationException($this->t('Data error in the transaction or system error. Text: @text', ['@text' => $response['responsetext']]));
       }
     }
+    elseif (isset($response['esponse'])) {
+      // There is a typo in some responses.
+      if ($response['esponse'] == 2) {
+        throw new DeclineException($this->t('Denied transaction. Text: @text', ['@text' => $response['responsetext']]));
+      }
+      elseif ($response['esponse'] == 3) {
+        throw new AuthenticationException($this->t('Data error in the transaction or system error. Text: @text', ['@text' => $response['responsetext']]));
+      }
+    }
     else {
       throw new InvalidResponseException($this->t('Response value not found'));
     }
@@ -334,7 +380,7 @@ class Cardinal extends OffsitePaymentGatewayBase {
     $headers = ['Content-Type' => 'application/x-www-form-urlencoded'];
     $response = $this->client->request('POST', $this->getUrl(), [
       'form_params' => $parameters,
-      'timeout' => 5,
+      'timeout' => 10,
     ]);
     $contents = $response->getBody()->getContents();
     $contents = substr($contents, 1);
@@ -359,7 +405,7 @@ class Cardinal extends OffsitePaymentGatewayBase {
    * {@inheritdoc}
    */
   public function capturePayment(PaymentInterface $payment, Price $amount = NULL) {
-    $this->assertPaymentState($payment, ['authorization']);
+    $this->assertPaymentState($payment, ['auth']);
 
     // If not specified, capture the entire amount.
     $amount = $amount ?: $payment->getAmount();
@@ -392,22 +438,27 @@ class Cardinal extends OffsitePaymentGatewayBase {
    * {@inheritdoc}
    */
   public function voidPayment(PaymentInterface $payment) {
-    $this->assertPaymentState($payment, ['authorization']);
+    $this->assertPaymentState($payment, ['auth']);
     $amount_number = number_format(round($payment->getAmount()->getNumber(), 2), 2, '.', '');
     $remote_id = $payment->getRemoteId();
+    $time = $this->time->getRequestTime();
     $parameters = [
       'type' => 'void',
       'key_id' => $this->getKeyId(),
+      'orderid' => $payment->getOrderId(),
+      'amount' => $amount_number,
       'hash' => $this->getHash([
         $payment->getOrderId(),
         $amount_number,
-        $this->time->getRequestTime(),
+        $time,
         $this->getKey(),
       ]),
-      'time' => $this->time->getRequestTime(),
+      'time' => $time,
       'transactionid' => $remote_id,
-      'processor_id' => $this->getProcessorId(),
     ];
+    if (!empty($this->getProcessorId())) {
+      $parameters['processor_id'] = $this->getProcessorId();
+    }
     $result = $this->doPost($parameters);
     $this->validateResponse($result);
     $payment->setState('authorization_voided');
