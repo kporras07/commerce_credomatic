@@ -78,6 +78,11 @@ class CardinalForm extends BasePaymentOffsiteForm {
       '#value' => $payment_gateway_plugin->getKeyId(),
       '#name' => 'key_id',
     ];
+    $form['username'] = [
+      '#type' => 'hidden',
+      '#value' => $payment_gateway_plugin->getUsername(),
+      '#name' => 'username',
+    ];
     $form['hash'] = [
       '#type' => 'hidden',
       '#value' => $payment_gateway_plugin->getHash([

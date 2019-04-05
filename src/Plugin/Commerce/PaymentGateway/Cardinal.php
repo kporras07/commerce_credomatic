@@ -91,6 +91,7 @@ class Cardinal extends OffsitePaymentGatewayBase {
       'key' => '',
       'key_id' => '',
       'processor_id' => '',
+      'username' => '',
     ] + parent::defaultConfiguration();
   }
 
@@ -120,6 +121,13 @@ class Cardinal extends OffsitePaymentGatewayBase {
       '#type' => 'textfield',
       '#title' => $this->t('Processor ID'),
       '#default_value' => $this->configuration['processor_id'],
+      '#required' => FALSE,
+    ];
+
+    $form['username'] = [
+      '#type' => 'textfield',
+      '#title' => $this->t('Username'),
+      '#default_value' => $this->configuration['username'],
       '#required' => FALSE,
     ];
 
@@ -155,6 +163,13 @@ class Cardinal extends OffsitePaymentGatewayBase {
   }
 
   /**
+   * Returns username.
+   */
+  public function getUsername() {
+    return $this->configuration['username'] ?: '';
+  }
+
+  /**
    * {@inheritdoc}
    */
   public function submitConfigurationForm(array &$form, FormStateInterface $form_state) {
@@ -165,6 +180,7 @@ class Cardinal extends OffsitePaymentGatewayBase {
       $this->configuration['key'] = $values['key'];
       $this->configuration['key_id'] = $values['key_id'];
       $this->configuration['processor_id'] = $values['processor_id'];
+      $this->configuration['username'] = $values['username'];
     }
   }
 
@@ -238,6 +254,7 @@ class Cardinal extends OffsitePaymentGatewayBase {
       'orderid' => $payment->getOrderId(),
       'cvv' => $payment_details['security_code'],
       'processor_id' => $this->getProcessorId(),
+      'username' => $this->getUsername(),
     ];
     $result = $this->doPost($parameters);
     $this->validateResponse($result);
@@ -335,8 +352,7 @@ class Cardinal extends OffsitePaymentGatewayBase {
    */
   public function getHash($values) {
     $string = implode('|', $values);
-    $hash = md5($string);
-    return $hash;
+    return md5($string);
   }
 
   /**
@@ -363,6 +379,7 @@ class Cardinal extends OffsitePaymentGatewayBase {
       'transactionid' => $remote_id,
       'amount' => $amount_number,
       'processor_id' => $this->getProcessorId(),
+      'username' => $this->getUsername(),
     ];
     $result = $this->doPost($parameters);
     $this->validateResponse($result);
