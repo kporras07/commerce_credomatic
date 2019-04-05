@@ -448,17 +448,14 @@ class Cardinal extends OffsitePaymentGatewayBase {
    */
   public function voidPayment(PaymentInterface $payment) {
     $this->assertPaymentState($payment, ['auth']);
-    $amount_number = number_format(round($payment->getAmount()->getNumber(), 2), 2, '.', '');
     $remote_id = $payment->getRemoteId();
     $time = $this->time->getRequestTime();
     $parameters = [
       'type' => 'void',
       'key_id' => $this->getKeyId(),
-      'orderid' => $payment->getOrderId(),
-      'amount' => $amount_number,
       'hash' => $this->getHash([
-        $payment->getOrderId(),
-        $amount_number,
+        '',
+        '',
         $time,
         $this->getKey(),
       ]),
