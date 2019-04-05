@@ -355,18 +355,27 @@ class Cardinal extends OffsitePaymentGatewayBase {
       throw new InvalidResponseException($this->t('Response code value not found'));
     }
 
-    $hash_elements = [
-      $response['orderid'],
-      $response['amount'],
-      $response['response'],
-      $response['transactionid'],
-      $response['avsresponse'],
-      $response['cvvresponse'],
-      $response['time'],
-      $this->getKey(),
-    ];
+    $hash_elements = [];
+    $hash_elements[] = isset($response['orderid']) ? $response['orderid'] : '';
+    $hash_elements[] = isset($response['amount']) ? $response['amount'] : '';
+    // Take typo into account.
+    if (isset($response['response'])) {
+      $hash_elements[] = $response['response'];
+    }
+    elseif ($response['esponse']) {
+      $hash_elements[] = $response['esponse'];
+    }
+    else {
+      $hash_elements[] = '';
+    }
+    $hash_elements[] = isset($response['transactionid']) ? $response['transactionid'] : '';
+    $hash_elements[] = isset($response['avsresponse']) ? $response['avsresponse'] : '';
+    $hash_elements[] = isset($response['cvvresponse']) ? $response['cvvresponse'] : '';
+    $hash_elements[] = isset($response['time']) ? $response['time'] : '';
+    $hash_elements[] = $this->getKey();
+
     $hash = $this->getHash($hash_elements);
-    if ($hash !== $response['hash']) {
+    if (isset($response['hash']) && $hash !== $response['hash']) {
       throw new InvalidResponseException($this->t('Hash can not be verified'));
     }
 
@@ -416,7 +425,7 @@ class Cardinal extends OffsitePaymentGatewayBase {
       'type' => 'capture',
       'key_id' => $this->getKeyId(),
       'hash' => $this->getHash([
-        $payment->getOrderId(),
+        '',
         $amount_number,
         $this->time->getRequestTime(),
         $this->getKey(),
@@ -455,6 +464,7 @@ class Cardinal extends OffsitePaymentGatewayBase {
       ]),
       'time' => $time,
       'transactionid' => $remote_id,
+      'username' => $this->getUsername(),
     ];
     if (!empty($this->getProcessorId())) {
       $parameters['processor_id'] = $this->getProcessorId();
