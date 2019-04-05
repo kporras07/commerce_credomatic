@@ -32,7 +32,7 @@ use Symfony\Component\DependencyInjection\ContainerInterface;
  *   },
  *   payment_method_types = {"credit_card"},
  *   credit_card_types = {
- *     "amex", "dinersclub", "discover", "jcb", "maestro", "mastercard", "visa",
+ *     "amex", "dinersclub", "discover", "jcb", "mastercard", "visa",
  *   },
  * )
  */

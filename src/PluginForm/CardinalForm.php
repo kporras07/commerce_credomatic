@@ -26,6 +26,14 @@ class CardinalForm extends BasePaymentOffsiteForm {
     $amount = $payment->getAmount();
     $amount_number = number_format(round($amount->getNumber(), 2), 2, '.', '');
 
+    $form['logos'] = [
+      '#theme' => 'image',
+      '#uri' => drupal_get_path('module', 'commerce_credomatic') . '/images/logos.png',
+      '#alt' => t('Cards logos'),
+      '#title' => t('Accepted cards'),
+      '#width' => 'auto',
+    ];
+
     $form['ccnumber'] = [
       '#type' => 'textfield',
       '#title' => t('Credit Card Number'),
